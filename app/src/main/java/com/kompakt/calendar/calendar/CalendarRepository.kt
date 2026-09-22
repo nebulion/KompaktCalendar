@@ -78,6 +78,23 @@ class CalendarRepository(private val context: Context) {
         return list
     }
 
+    /**
+     * Asks the sync adapter behind every synced calendar (DecSync CC, DAVx5, …) to sync now.
+     * Returns how many accounts were asked; 0 means only phone-only calendars exist.
+     */
+    suspend fun requestSyncNow(): Int {
+        val accounts = getCalendars()
+            .filter { it.canRequestSync && it.accountName.isNotEmpty() }
+            .map { android.accounts.Account(it.accountName, it.accountType) }
+            .distinct()
+        val extras = android.os.Bundle().apply {
+            putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+            putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+        }
+        accounts.forEach { ContentResolver.requestSync(it, CalendarContract.AUTHORITY, extras) }
+        return accounts.size
+    }
+
     suspend fun setCalendarVisibility(calendarId: Long, visible: Boolean) {
         if (!hasWritePermission()) return
         val values = ContentValues().apply {
@@ -96,7 +113,9 @@ class CalendarRepository(private val context: Context) {
     suspend fun getEventsBetween(
         start: LocalDate,
         endInclusive: LocalDate,
-        onlyVisible: Boolean = true
+        onlyVisible: Boolean = true,
+        extraSelection: String? = null,
+        extraArgs: Array<String>? = null
     ): List<CalendarEvent> {
         if (!hasReadPermission()) return emptyList()
 
@@ -126,10 +145,13 @@ class CalendarRepository(private val context: Context) {
             CalendarContract.Instances.VISIBLE
         )
 
-        val selection = if (onlyVisible) "${CalendarContract.Instances.VISIBLE} = 1" else null
+        val selection = listOfNotNull(
+            if (onlyVisible) "${CalendarContract.Instances.VISIBLE} = 1" else null,
+            extraSelection?.let { "($it)" }
+        ).joinToString(" AND ").ifEmpty { null }
 
         val rawRows = mutableListOf<EventRow>()
-        resolver.query(uri, projection, selection, null, "${CalendarContract.Instances.BEGIN} ASC")?.use { c ->
+        resolver.query(uri, projection, selection, extraArgs, "${CalendarContract.Instances.BEGIN} ASC")?.use { c ->
             while (c.moveToNext()) {
                 rawRows.add(
                     EventRow(
@@ -533,15 +555,31 @@ class CalendarRepository(private val context: Context) {
         return uri != null
     }
 
-    suspend fun searchEvents(query: String, fromDaysBack: Long = 30, toDaysAhead: Long = 365): List<CalendarEvent> {
-        if (query.isBlank()) return emptyList()
+    /**
+     * Finds events whose title, notes, or location contain [query], over [yearsBack] years
+     * of history and [yearsAhead] years ahead. A repeating event appears once: at its next
+     * occurrence, or at its last one if all are past.
+     */
+    suspend fun searchEvents(query: String, yearsBack: Long = 10, yearsAhead: Long = 5): List<CalendarEvent> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        val pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        val like = " LIKE ? ESCAPE '\\'"
+        val selection = listOf(
+            CalendarContract.Instances.TITLE,
+            CalendarContract.Instances.DESCRIPTION,
+            CalendarContract.Instances.EVENT_LOCATION
+        ).joinToString(" OR ") { it + like }
         val today = LocalDate.now()
-        val all = getEventsBetween(today.minusDays(fromDaysBack), today.plusDays(toDaysAhead))
-        val q = query.trim().lowercase()
-        return all.filter {
-            it.title.lowercase().contains(q) ||
-                    (it.description?.lowercase()?.contains(q) == true) ||
-                    (it.location?.lowercase()?.contains(q) == true)
+        val matches = getEventsBetween(
+            today.minusYears(yearsBack),
+            today.plusYears(yearsAhead),
+            extraSelection = selection,
+            extraArgs = arrayOf(pattern, pattern, pattern)
+        )
+        val now = LocalDateTime.now()
+        return matches.groupBy { it.id }.values.map { occurrences ->
+            occurrences.firstOrNull { !it.end.isBefore(now) } ?: occurrences.last()
         }
     }
 }

@@ -3,6 +3,7 @@ package com.kompakt.calendar.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,11 +21,32 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-const val SCROLL_STEP = 4
+/**
+ * Moves the list forward by one screen. The first row that the screen cuts off
+ * becomes the top row, so no row is skipped. If one row is taller than the
+ * screen, the list moves by the screen height.
+ */
+suspend fun LazyListState.pageDown() {
+    val info = layoutInfo
+    val viewportEnd = info.viewportEndOffset
+    val cut = info.visibleItemsInfo.firstOrNull { it.offset + it.size > viewportEnd }
+    if (cut != null && cut.index > firstVisibleItemIndex) {
+        scrollToItem(cut.index)
+    } else {
+        scrollBy((viewportEnd - info.viewportStartOffset).toFloat())
+    }
+}
+
+/** Moves the list back by one screen. */
+suspend fun LazyListState.pageUp() {
+    val info = layoutInfo
+    scrollBy(-(info.viewportEndOffset - info.viewportStartOffset).toFloat())
+}
 
 @Composable
 fun Modifier.eInkVerticalScroll(
@@ -33,16 +55,16 @@ fun Modifier.eInkVerticalScroll(
     isScrollable: Boolean
 ): Modifier {
     var isDragging by remember { mutableStateOf(false) }
-    return this.pointerInput(Unit) {
+    // pointerInput keeps its first lambda, so read the latest value through this state.
+    val scrollable by rememberUpdatedState(isScrollable)
+    return this.pointerInput(state) {
         detectVerticalDragGestures(
-            onDragEnd = { isDragging = false }
+            onDragEnd = { isDragging = false },
+            onDragCancel = { isDragging = false }
         ) { _, dragAmount ->
-            if (!isDragging && isScrollable) {
+            if (!isDragging && (scrollable || state.canScrollForward || state.canScrollBackward)) {
                 isDragging = true
-                val direction = if (dragAmount > 0) -1 else 1
-                val newIdx = (state.firstVisibleItemIndex + direction * SCROLL_STEP)
-                    .coerceIn(0, (state.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
-                scope.launch { state.scrollToItem(newIdx) }
+                scope.launch { if (dragAmount > 0) state.pageUp() else state.pageDown() }
             }
         }
     }
@@ -52,7 +74,8 @@ fun Modifier.eInkVerticalScroll(
 fun EInkScrollbar(
     state: LazyListState,
     scope: CoroutineScope,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomInset: Dp = 0.dp
 ) {
     val canScrollForward by remember { derivedStateOf { state.canScrollForward } }
     val canScrollBackward by remember { derivedStateOf { state.canScrollBackward } }
@@ -60,21 +83,20 @@ fun EInkScrollbar(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .width(32.dp)
-            .padding(horizontal = 4.dp),
+            .padding(bottom = bottomInset)
+            .width(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         IconButton(
             onClick = {
-                val newIdx = (state.firstVisibleItemIndex - SCROLL_STEP).coerceAtLeast(0)
-                scope.launch { state.scrollToItem(newIdx) }
+                scope.launch { state.pageUp() }
             },
-            modifier = Modifier.size(32.dp).padding(top = 8.dp)
+            modifier = Modifier.size(width = 40.dp, height = 48.dp)
         ) {
             Icon(
                 Icons.Default.KeyboardArrowUp,
                 contentDescription = "Scroll up",
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(28.dp),
                 tint = if (canScrollBackward) Color.Black else MaterialTheme.colorScheme.outline
             )
         }
@@ -130,16 +152,14 @@ fun EInkScrollbar(
 
         IconButton(
             onClick = {
-                val newIdx = (state.firstVisibleItemIndex + SCROLL_STEP)
-                    .coerceAtMost(state.layoutInfo.totalItemsCount - 1)
-                scope.launch { state.scrollToItem(newIdx) }
+                scope.launch { state.pageDown() }
             },
-            modifier = Modifier.size(32.dp).padding(bottom = 8.dp)
+            modifier = Modifier.size(width = 40.dp, height = 48.dp)
         ) {
             Icon(
                 Icons.Default.KeyboardArrowDown,
                 contentDescription = "Scroll down",
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(28.dp),
                 tint = if (canScrollForward) Color.Black else MaterialTheme.colorScheme.outline
             )
         }

@@ -24,13 +24,18 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.kompakt.calendar.calendar.CalendarEvent
-import com.kompakt.calendar.ui.EInkScrollbar
 import com.kompakt.calendar.ui.common.DashedDivider
+import com.kompakt.calendar.ui.mmd.FabClearance
+import com.kompakt.calendar.ui.EInkScrollbar
 import com.kompakt.calendar.ui.eInkVerticalScroll
+import com.kompakt.calendar.ui.mmd.EinkColors
+import com.kompakt.calendar.ui.mmd.EinkType
+import com.kompakt.calendar.ui.mmd.HeaderAction
+import com.kompakt.calendar.ui.mmd.HeaderTitle
+import com.kompakt.calendar.ui.mmd.ScreenHeader
 import com.mudita.mmd.components.buttons.FloatingActionButtonMMD
 import com.mudita.mmd.components.divider.HorizontalDividerMMD
 import com.mudita.mmd.components.text.TextMMD
-import com.mudita.mmd.components.top_app_bar.TopAppBarMMD
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -50,31 +55,12 @@ fun AgendaScreen(
 
     Scaffold(
         topBar = {
-            TopAppBarMMD(
-                title = {
-                    TextMMD(
-                        text = "Agenda",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                },
+            ScreenHeader(
+                title = { HeaderTitle("Agenda", Modifier.padding(start = 8.dp)) },
                 actions = {
-                    IconButton(onClick = { navController.navigate("calendar") }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.CalendarMonth, contentDescription = "Calendar", modifier = Modifier.size(24.dp))
-                    }
-                    IconButton(
-                        onClick = { navController.navigate("event_search") },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(24.dp))
-                    }
-                    IconButton(
-                        onClick = { navController.navigate("settings") },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp))
-                    }
+                    HeaderAction(Icons.Outlined.CalendarMonth, "Calendar", { navController.navigate("calendar") })
+                    HeaderAction(Icons.Default.Search, "Search", { navController.navigate("event_search") })
+                    HeaderAction(Icons.Outlined.Settings, "Settings", { navController.navigate("settings") })
                 }
             )
         },
@@ -83,8 +69,7 @@ fun AgendaScreen(
                 onClick = {
                     viewModel.beginNewEvent()
                     navController.navigate("add_event?fromCalendar=false")
-                },
-                modifier = Modifier.padding(end = 16.dp, bottom = 8.dp)
+                }
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Event", modifier = Modifier.size(32.dp))
             }
@@ -101,7 +86,7 @@ fun AgendaScreen(
             ) {
                 if (events.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        TextMMD("No upcoming events")
+                        TextMMD("No upcoming events", fontSize = EinkType.TitleMedium)
                     }
                 } else {
                     val groupedEvents = remember(events) {
@@ -172,7 +157,7 @@ private fun AgendaList(
         }
 
         if (isScrollable) {
-            EInkScrollbar(state = state, scope = scope)
+            EInkScrollbar(state = state, scope = scope, bottomInset = FabClearance)
         }
     }
 }
@@ -188,13 +173,15 @@ fun AgendaHeader(date: LocalDate, useAmericanDateFormat: Boolean) {
     }
 
     Column {
+        // Day heading: bold, over a solid one-pixel-wide black line, so it reads
+        // apart from the dotted lines between events.
         TextMMD(
             text = label,
-            fontSize = 16.sp,
+            fontSize = EinkType.Body,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
         )
-        HorizontalDividerMMD(thickness = 2.dp)
+        HorizontalDividerMMD(thickness = 1.dp, color = EinkColors.Ink)
     }
 }
 
@@ -214,22 +201,24 @@ fun AgendaItem(event: CalendarEvent, onClick: () -> Unit) {
             .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
+        // Two-line row as in Kompakt Notes: bold title, regular black detail lines.
         TextMMD(
             text = event.title,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold
+            fontSize = EinkType.TitleMedium,
+            fontWeight = FontWeight.Bold
         )
         TextMMD(
             text = timeTxt,
-            fontSize = 13.sp,
+            fontSize = EinkType.Body,
             fontWeight = FontWeight.Normal,
-            modifier = Modifier.padding(top = 4.dp)
+            modifier = Modifier.padding(top = 2.dp)
         )
         if (!event.location.isNullOrBlank()) {
             TextMMD(
                 text = event.location,
-                fontSize = 13.sp,
+                fontSize = EinkType.Body,
                 fontWeight = FontWeight.Normal,
+                maxLines = 1,
                 modifier = Modifier.padding(top = 2.dp)
             )
         }

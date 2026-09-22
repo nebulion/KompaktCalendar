@@ -83,16 +83,16 @@ fun CalendarPermissionGate(
             Spacer(Modifier.height(24.dp))
             TextMMD(
                 "Calendar access needed",
-                fontSize = 22.sp,
+                fontSize = com.kompakt.calendar.ui.mmd.EinkType.Title,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(12.dp))
             TextMMD(
                 "KompaktCalendar reads events from your device's calendars, including any " +
-                        "synced via DAVx5 (CalDAV), Google, or Exchange. Grant calendar " +
+                        "synced via DecSync CC, DAVx5 (CalDAV), Google, or Exchange. Grant calendar " +
                         "access to continue.",
-                fontSize = 14.sp,
+                fontSize = com.kompakt.calendar.ui.mmd.EinkType.Body,
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(32.dp))
@@ -143,7 +143,7 @@ fun CalendarPermissionGate(
                                 } else {
                                     "Grant access"
                                 },
-                                fontSize = 16.sp,
+                                fontSize = com.kompakt.calendar.ui.mmd.EinkType.Body,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -152,7 +152,7 @@ fun CalendarPermissionGate(
                             Spacer(Modifier.height(8.dp))
                             TextMMD(
                                 "To ensure notifications arrive on time, please disable battery optimization for this app.",
-                                fontSize = 12.sp,
+                                fontSize = com.kompakt.calendar.ui.mmd.EinkType.Small,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center
                             )
@@ -160,7 +160,7 @@ fun CalendarPermissionGate(
                             Spacer(Modifier.height(8.dp))
                             TextMMD(
                                 "Note: Android 12 requires explicit permission to schedule exact event reminders.",
-                                fontSize = 12.sp,
+                                fontSize = com.kompakt.calendar.ui.mmd.EinkType.Small,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center
                             )
@@ -169,10 +169,10 @@ fun CalendarPermissionGate(
                 }
             Spacer(Modifier.height(16.dp))
             TextMMD(
-                "Tip: install DAVx5 from F-Droid or Play Store to sync any CalDAV server " +
-                        "(Nextcloud, Posteo, mailbox.org, …). Once a CalDAV account is added, " +
-                        "its calendars appear here automatically.",
-                fontSize = 12.sp,
+                "Tip: DecSync CC (serverless, via Syncthing) or DAVx5 (any CalDAV server: " +
+                        "Nextcloud, Posteo, mailbox.org, …) from F-Droid. Once a calendar is " +
+                        "ticked there, it appears here automatically.",
+                fontSize = com.kompakt.calendar.ui.mmd.EinkType.Small,
                 textAlign = TextAlign.Center
             )
         }

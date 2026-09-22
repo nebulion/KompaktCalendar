@@ -78,6 +78,12 @@ class MainActivity : ComponentActivity() {
                                     viewModel = calendarViewModel
                                 )
                             }
+                            composable("permissions") {
+                                PermissionsScreen(
+                                    navController = navController,
+                                    viewModel = calendarViewModel
+                                )
+                            }
                             composable(
                                 route = "add_event?fromCalendar={fromCalendar}",
                                 arguments = listOf(

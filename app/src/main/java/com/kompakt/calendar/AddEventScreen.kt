@@ -55,8 +55,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.kompakt.calendar.calendar.CalendarAccount
-import com.kompakt.calendar.ui.EInkScrollbar
-import com.kompakt.calendar.ui.eInkVerticalScroll
+import com.kompakt.calendar.ui.common.DashedDivider
+import com.kompakt.calendar.ui.mmd.RowDivider
+import com.kompakt.calendar.calendar.pickDefaultCalendar
+import com.kompakt.calendar.ui.mmd.PagedList
+import com.kompakt.calendar.ui.mmd.EinkColors
+import com.kompakt.calendar.ui.mmd.EinkTokens
+import com.kompakt.calendar.ui.mmd.EinkType
+import com.kompakt.calendar.ui.mmd.InlineMessage
 import com.mudita.mmd.components.buttons.ButtonMMD
 import com.mudita.mmd.components.checkbox.CheckboxMMD
 import com.mudita.mmd.components.divider.HorizontalDividerMMD
@@ -98,17 +104,15 @@ fun AddEventScreen(
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // A save problem shows as a static line under the header (no Toast).
+    var saveError by remember { mutableStateOf<String?>(null) }
 
     val isEdit = editingId != null
 
     // Ensure calendar ID is initialized if null
     LaunchedEffect(calendars, defaultCalendarId, selectedCalendarId) {
         if (selectedCalendarId == null) {
-            val writableCalendars = calendars.filter { it.isWritable }
-            val id = defaultCalendarId
-                ?: writableCalendars.firstOrNull { it.isPrimary }?.id
-                ?: writableCalendars.firstOrNull()?.id
-            if (id != null) viewModel.updateDraftCalendarId(id)
+            pickDefaultCalendar(calendars, defaultCalendarId)?.let { viewModel.updateDraftCalendarId(it.id) }
         }
     }
 
@@ -116,6 +120,8 @@ fun AddEventScreen(
     var showCustomReminderPicker by remember { mutableStateOf(false) }
     var showCalendarPicker by remember { mutableStateOf(false) }
     var showRecurrencePicker by remember { mutableStateOf(false) }
+    var dateTimeSheet by remember { mutableStateOf(DateTimeSheet.None) }
+    val startWeekOnMonday by viewModel.startWeekOnMonday.collectAsState()
 
     val reminderOptions = remember(isAllDay) {
         if (isAllDay) {
@@ -165,6 +171,7 @@ fun AddEventScreen(
                     color = Color.White,
                     modifier = Modifier.statusBarsPadding()
                 ) {
+                    Column {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -179,7 +186,7 @@ fun AddEventScreen(
                         TextField(
                             value = title,
                             onValueChange = { viewModel.updateDraftTitle(it) },
-                            placeholder = { TextMMD("Add Title", fontSize = 24.sp, color = Color.LightGray) },
+                            placeholder = { TextMMD("Add Title", fontSize = EinkType.Title, color = EinkColors.Ink) },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -190,19 +197,16 @@ fun AddEventScreen(
                                 focusedIndicatorColor = Color.Transparent,
                                 unfocusedIndicatorColor = Color.Transparent
                             ),
-                            textStyle = LocalTextStyle.current.copy(fontSize = 24.sp, fontWeight = FontWeight.Medium)
+                            textStyle = LocalTextStyle.current.copy(fontSize = EinkType.Title, fontWeight = FontWeight.Bold, color = EinkColors.Ink)
                         )
 
                         ButtonMMD(
                             onClick = {
                                 if (selectedCalendarId == null) {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "No writable calendar available. Add an account in DAVx5 or Google first.",
-                                        android.widget.Toast.LENGTH_LONG
-                                    ).show()
+                                    saveError = "No writable calendar. Tick a calendar in DecSync CC, or add an account in DAVx5 or Google first."
                                     return@ButtonMMD
                                 }
+                                saveError = null
                                 scope.launch {
                                     val ok = viewModel.saveEvent(
                                         EventDraft(
@@ -224,19 +228,20 @@ fun AddEventScreen(
                                     if (ok) {
                                         navController.popBackStack()
                                     } else {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "Could not save event.",
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
+                                        saveError = "Could not save the event."
                                     }
                                 }
                             },
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
                         ) {
-                            TextMMD(if (isEdit) "Save" else "Create", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            TextMMD(if (isEdit) "Save" else "Create", fontWeight = FontWeight.Bold, fontSize = EinkType.Body)
                         }
+                    }
+                    // The 3dp header rule, then a static message where a Toast
+                    // (which fades in and out) used to appear.
+                    HorizontalDividerMMD(thickness = EinkTokens.HeaderRule, color = EinkColors.Ink)
+                    saveError?.let { InlineMessage(it) }
                     }
                 }
             }
@@ -247,52 +252,33 @@ fun AddEventScreen(
                     .background(Color.White)
                     .padding(paddingValues)
             ) {
-                LazyColumn(
+                PagedList(
                     state = listState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .eInkVerticalScroll(listState, scope, isScrollable),
-                    userScrollEnabled = false
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                 ) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(Color.Black)
-                        )
-                    }
-
-                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item { Spacer(modifier = Modifier.height(4.dp)) }
 
                     item {
-                        DateTimeRow(
-                            label = "FROM",
+                        DateTimeField(
+                            label = "Starts",
                             date = startDate,
                             time = startTime,
                             isAllDay = isAllDay,
                             useAmericanDateFormat = useAmericanDateFormat,
-                            onDateChange = {
-                                viewModel.updateDraftStartDate(it)
-                                if (endDate.isBefore(it)) viewModel.updateDraftEndDate(it)
-                            },
-                            onTimeChange = { viewModel.updateDraftStartTime(it) }
+                            onDateClick = { dateTimeSheet = DateTimeSheet.StartDate },
+                            onTimeClick = { dateTimeSheet = DateTimeSheet.StartTime }
                         )
                     }
 
                     item {
-                        DateTimeRow(
-                            label = "TO",
+                        DateTimeField(
+                            label = "Ends",
                             date = endDate,
                             time = endTime,
                             isAllDay = isAllDay,
                             useAmericanDateFormat = useAmericanDateFormat,
-                            onDateChange = {
-                                viewModel.updateDraftEndDate(it)
-                                if (it.isBefore(startDate)) viewModel.updateDraftStartDate(it)
-                            },
-                            onTimeChange = { viewModel.updateDraftEndTime(it) }
+                            onDateClick = { dateTimeSheet = DateTimeSheet.EndDate },
+                            onTimeClick = { dateTimeSheet = DateTimeSheet.EndTime }
                         )
                     }
 
@@ -306,11 +292,7 @@ fun AddEventScreen(
                     }
 
                     item {
-                        HorizontalDividerMMD(
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            color = Color.Black
-                        )
+                        RowDivider()
                     }
 
                     item {
@@ -323,11 +305,7 @@ fun AddEventScreen(
                     }
 
                     item {
-                        HorizontalDividerMMD(
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            color = Color.Black
-                        )
+                        RowDivider()
                     }
 
                     item {
@@ -348,11 +326,7 @@ fun AddEventScreen(
                     }
 
                     item {
-                        HorizontalDividerMMD(
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            color = Color.Black
-                        )
+                        RowDivider()
                     }
 
                     item {
@@ -387,26 +361,19 @@ fun AddEventScreen(
                     }
 
                     item {
-                        HorizontalDividerMMD(
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            color = Color.Black
-                        )
+                        RowDivider()
                     }
 
                     item {
                         OptionRow(
                             icon = Icons.Default.CalendarMonth,
                             title = selectedCalendar?.let {
-                                "${it.displayName}${if (it.isDavx5) " (DAVx5)" else ""}"
+                                it.displayName + (it.syncSourceLabel?.let { label -> " ($label)" } ?: "")
                             } ?: "Choose calendar",
                             hasChevron = true,
                             onClick = { showCalendarPicker = true }
                         )
                     }
-                }
-                if (isScrollable) {
-                    EInkScrollbar(state = listState, scope = scope)
                 }
             }
         }
@@ -465,8 +432,42 @@ fun AddEventScreen(
                 onDismiss = { showRecurrencePicker = false }
             )
         }
+
+        val closeSheet = { dateTimeSheet = DateTimeSheet.None }
+        when (dateTimeSheet) {
+            DateTimeSheet.None -> Unit
+            DateTimeSheet.StartDate -> DatePickerSheet(
+                title = "Start date",
+                selected = startDate,
+                startWeekOnMonday = startWeekOnMonday,
+                onPick = { viewModel.updateDraftStartDate(it); closeSheet() },
+                onDismiss = closeSheet
+            )
+            DateTimeSheet.EndDate -> DatePickerSheet(
+                title = "End date",
+                selected = endDate,
+                startWeekOnMonday = startWeekOnMonday,
+                onPick = { viewModel.updateDraftEndDate(it); closeSheet() },
+                onDismiss = closeSheet
+            )
+            DateTimeSheet.StartTime -> TimePickerSheet(
+                title = "Start time",
+                initial = startTime,
+                onPick = { viewModel.updateDraftStartTime(it); closeSheet() },
+                onDismiss = closeSheet
+            )
+            DateTimeSheet.EndTime -> TimePickerSheet(
+                title = "End time",
+                initial = endTime,
+                onPick = { viewModel.updateDraftEndTime(it); closeSheet() },
+                onDismiss = closeSheet
+            )
+        }
     }
 }
+
+/** Which date or time sheet the event form shows. */
+private enum class DateTimeSheet { None, StartDate, StartTime, EndDate, EndTime }
 
 @Composable
 private fun RecurrencePickerOverlay(
@@ -497,7 +498,7 @@ private fun RecurrencePickerOverlay(
     }
 
     val daysOfWeek = listOf(
-        "Mo" to 1, "Di" to 2, "Mi" to 3, "Do" to 4, "Fr" to 5, "Sa" to 6, "So" to 7
+        "Mo" to 1, "Tu" to 2, "We" to 3, "Th" to 4, "Fr" to 5, "Sa" to 6, "Su" to 7
     )
 
     Surface(
@@ -513,11 +514,11 @@ private fun RecurrencePickerOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
+                    Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(EinkTokens.HeaderGlyph))
                 }
                 TextMMD(
                     "Set Recurrence",
-                    fontSize = 20.sp,
+                    fontSize = EinkType.Title,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 8.dp).weight(1f)
                 )
@@ -525,21 +526,17 @@ private fun RecurrencePickerOverlay(
                     onClick = { onPick(currentRrule, currentUntil, currentDays) },
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    TextMMD("Done", fontWeight = FontWeight.Bold)
+                    TextMMD("Done", fontSize = EinkType.Body, fontWeight = FontWeight.Bold)
                 }
             }
 
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Black))
+            HorizontalDividerMMD(thickness = EinkTokens.HeaderRule, color = EinkColors.Ink)
 
             Row(modifier = Modifier.fillMaxSize()) {
-                LazyColumn(
+                PagedList(
                     state = listState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .eInkVerticalScroll(listState, scope, isScrollable)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    userScrollEnabled = false
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     items(options) { (label, rule) ->
                         Row(
@@ -552,7 +549,7 @@ private fun RecurrencePickerOverlay(
                         ) {
                             TextMMD(
                                 label,
-                                fontSize = 16.sp,
+                                fontSize = EinkType.TitleMedium,
                                 fontWeight = if (currentRrule == rule) FontWeight.Bold else FontWeight.Normal
                             )
                             RadioButtonMMD(
@@ -560,14 +557,14 @@ private fun RecurrencePickerOverlay(
                                 onClick = { currentRrule = rule }
                             )
                         }
-                        HorizontalDividerMMD(thickness = 0.5.dp, color = Color.LightGray)
+                        DashedDivider()
                     }
 
                     if (currentRrule != null) {
                         if (currentRrule?.contains("WEEKLY") == true) {
                             item {
                                 Spacer(modifier = Modifier.height(12.dp))
-                                TextMMD("Repeat on", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                TextMMD("Repeat on", fontSize = EinkType.TitleSmall, fontWeight = FontWeight.Bold, color = EinkColors.Ink)
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -577,7 +574,7 @@ private fun RecurrencePickerOverlay(
                                         val isSelected = currentDays.contains(dayNum)
                                         Box(
                                             modifier = Modifier
-                                                .size(34.dp)
+                                                .size(40.dp)
                                                 .background(
                                                     if (isSelected) Color.Black else Color.White,
                                                     CircleShape
@@ -595,7 +592,7 @@ private fun RecurrencePickerOverlay(
                                             TextMMD(
                                                 text = name,
                                                 color = if (isSelected) Color.White else Color.Black,
-                                                fontSize = 11.sp,
+                                                fontSize = EinkType.Label,
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
@@ -606,7 +603,7 @@ private fun RecurrencePickerOverlay(
 
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
-                            TextMMD("Repeat for", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            TextMMD("Repeat for", fontSize = EinkType.TitleSmall, fontWeight = FontWeight.Bold, color = EinkColors.Ink)
                             Spacer(modifier = Modifier.height(4.dp))
                             
                             val unitName = when {
@@ -638,15 +635,15 @@ private fun RecurrencePickerOverlay(
                                 Column(modifier = Modifier.padding(start = 4.dp)) {
                                     TextMMD(
                                         text = if (duration == 0) "Forever" else "$duration ${unitName}${if (duration > 1) "s" else ""}",
-                                        fontSize = 16.sp,
+                                        fontSize = EinkType.TitleMedium,
                                         fontWeight = FontWeight.Bold
                                     )
                                     if (currentUntil != null) {
                                         val pattern = if (useAmericanDateFormat) "EEE, MMM d yyyy" else "EEE, d MMM yyyy"
                                         TextMMD(
                                             text = "Until ${currentUntil?.format(DateTimeFormatter.ofPattern(pattern, Locale.US))}",
-                                            fontSize = 12.sp,
-                                            color = Color.Gray
+                                            fontSize = EinkType.Small,
+                                            color = EinkColors.Ink
                                         )
                                     }
                                 }
@@ -665,7 +662,7 @@ private fun RecurrencePickerOverlay(
                                                 }
                                             }
                                         }
-                                    }, modifier = Modifier.size(40.dp)) {
+                                    }, modifier = Modifier.size(48.dp)) {
                                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Decrease duration")
                                     }
                                     
@@ -678,16 +675,13 @@ private fun RecurrencePickerOverlay(
                                             "year" -> startDate.plusYears(newDuration.toLong())
                                             else -> currentUntil
                                         }
-                                    }, modifier = Modifier.size(40.dp)) {
+                                    }, modifier = Modifier.size(48.dp)) {
                                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Increase duration")
                                     }
                                 }
                             }
                         }
                     }
-                }
-                if (isScrollable) {
-                    EInkScrollbar(state = listState, scope = scope)
                 }
             }
         }
@@ -721,11 +715,11 @@ private fun ReminderPickerOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
+                    Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(EinkTokens.HeaderGlyph))
                 }
                 TextMMD(
                     "Set Reminders",
-                    fontSize = 20.sp,
+                    fontSize = EinkType.Title,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 8.dp).weight(1f)
                 )
@@ -733,11 +727,11 @@ private fun ReminderPickerOverlay(
                     onClick = onDismiss,
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    TextMMD("Done", fontWeight = FontWeight.Bold)
+                    TextMMD("Done", fontSize = EinkType.Body, fontWeight = FontWeight.Bold)
                 }
             }
 
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Black))
+            HorizontalDividerMMD(thickness = EinkTokens.HeaderRule, color = EinkColors.Ink)
 
             Row(modifier = Modifier.fillMaxSize()) {
                 val predefinedOptions = remember(options) { options.filter { it.second != null } }
@@ -745,14 +739,10 @@ private fun ReminderPickerOverlay(
                     selectedReminders.filter { mins -> options.none { it.second == mins } }
                 }
 
-                LazyColumn(
+                PagedList(
                     state = listState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .eInkVerticalScroll(listState, scope, isScrollable)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    userScrollEnabled = false
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 ) {
                     items(predefinedOptions) { (label, minutes) ->
                         val isSelected = selectedReminders.contains(minutes!!)
@@ -764,13 +754,13 @@ private fun ReminderPickerOverlay(
                                 else onPick(selectedReminders + minutes)
                             }
                         )
-                        HorizontalDividerMMD(thickness = 0.5.dp, color = Color.LightGray)
+                        DashedDivider()
                     }
 
                     if (customSelections.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
-                            TextMMD("Custom Reminders", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            TextMMD("Custom Reminders", fontSize = EinkType.TitleSmall, fontWeight = FontWeight.Bold, color = EinkColors.Ink)
                         }
                         items(customSelections) { minutes ->
                             ReminderToggleRow(
@@ -778,7 +768,7 @@ private fun ReminderPickerOverlay(
                                 isSelected = true,
                                 onToggle = { onPick(selectedReminders - minutes) }
                             )
-                            HorizontalDividerMMD(thickness = 0.5.dp, color = Color.LightGray)
+                            DashedDivider()
                         }
                     }
 
@@ -790,15 +780,12 @@ private fun ReminderPickerOverlay(
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(12.dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            TextMMD("Add Custom Reminder", fontWeight = FontWeight.Bold)
+                            TextMMD("Add Custom Reminder", fontSize = EinkType.Body, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(24.dp))
                     }
-                }
-                if (isScrollable) {
-                    EInkScrollbar(state = listState, scope = scope)
                 }
             }
         }
@@ -821,7 +808,7 @@ private fun ReminderToggleRow(
     ) {
         TextMMD(
             label,
-            fontSize = 16.sp,
+            fontSize = EinkType.TitleMedium,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )
         CheckboxMMD(
@@ -858,11 +845,11 @@ private fun CustomReminderPickerOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
+                    Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(EinkTokens.HeaderGlyph))
                 }
                 TextMMD(
                     "Custom Reminder",
-                    fontSize = 20.sp,
+                    fontSize = EinkType.Title,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 8.dp).weight(1f)
                 )
@@ -880,11 +867,11 @@ private fun CustomReminderPickerOverlay(
                     },
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    TextMMD("Add", fontWeight = FontWeight.Bold)
+                    TextMMD("Add", fontSize = EinkType.Body, fontWeight = FontWeight.Bold)
                 }
             }
 
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Black))
+            HorizontalDividerMMD(thickness = EinkTokens.HeaderRule, color = EinkColors.Ink)
 
             Column(
                 modifier = Modifier
@@ -892,7 +879,7 @@ private fun CustomReminderPickerOverlay(
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                TextMMD("Remind me", fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+                TextMMD("Remind me", fontSize = EinkType.Body, color = EinkColors.Ink, modifier = Modifier.padding(bottom = 8.dp))
                 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -973,7 +960,7 @@ private fun CustomReminderPickerOverlay(
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                TextMMD("before the event", fontSize = 14.sp, color = Color.Gray)
+                TextMMD("before the event", fontSize = EinkType.Body, color = EinkColors.Ink)
             }
         }
     }
@@ -1006,31 +993,27 @@ private fun CalendarPickerOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
+                    Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(EinkTokens.HeaderGlyph))
                 }
                 TextMMD(
                     "Select Calendar",
-                    fontSize = 20.sp,
+                    fontSize = EinkType.Title,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
 
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Black))
+            HorizontalDividerMMD(thickness = EinkTokens.HeaderRule, color = EinkColors.Ink)
 
             Row(modifier = Modifier.fillMaxSize()) {
-                LazyColumn(
+                PagedList(
                     state = listState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .eInkVerticalScroll(listState, scope, isScrollable)
-                        .padding(16.dp),
-                    userScrollEnabled = false
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentPadding = PaddingValues(16.dp),
                 ) {
                     if (calendars.isEmpty()) {
                         item {
-                            TextMMD("No writable calendars found. Sign in via DAVx5 or Google to add one.")
+                            TextMMD("No writable calendars found. Tick a calendar in DecSync CC, or sign in via DAVx5 or Google to add one.")
                         }
                     } else {
                         items(calendars) { cal ->
@@ -1045,13 +1028,13 @@ private fun CalendarPickerOverlay(
                                 Column(modifier = Modifier.weight(1f)) {
                                     TextMMD(
                                         cal.displayName,
-                                        fontSize = 16.sp,
+                                        fontSize = EinkType.TitleMedium,
                                         fontWeight = FontWeight.Medium
                                     )
                                     TextMMD(
-                                        "${cal.accountName}${if (cal.isDavx5) " · DAVx5" else ""}",
-                                        fontSize = 12.sp,
-                                        color = Color.Gray
+                                        cal.accountName + (cal.syncSourceLabel?.let { " · $it" } ?: ""),
+                                        fontSize = EinkType.Small,
+                                        color = EinkColors.Ink
                                     )
                                 }
                                 RadioButtonMMD(
@@ -1059,12 +1042,9 @@ private fun CalendarPickerOverlay(
                                     onClick = { onPick(cal.id) }
                                 )
                             }
-                            HorizontalDividerMMD(thickness = 0.5.dp, color = Color.LightGray)
+                            DashedDivider()
                         }
                     }
-                }
-                if (isScrollable) {
-                    EInkScrollbar(state = listState, scope = scope)
                 }
             }
         }
@@ -1080,282 +1060,6 @@ private fun formatMinutes(minutes: Int): String {
     }
 }
 
-
-@Composable
-fun DateTimeRow(
-    label: String,
-    date: LocalDate,
-    time: LocalTime,
-    isAllDay: Boolean,
-    useAmericanDateFormat: Boolean,
-    onDateChange: (LocalDate) -> Unit,
-    onTimeChange: (LocalTime) -> Unit
-) {
-    val context = LocalContext.current
-    val is24Hour = remember { DateFormat.is24HourFormat(context) }
-
-    val dateValue = remember(date, useAmericanDateFormat) {
-        val d = String.format(Locale.US, "%02d", date.dayOfMonth)
-        val m = String.format(Locale.US, "%02d", date.monthValue)
-        val y = String.format(Locale.US, "%02d", date.year % 100)
-        if (useAmericanDateFormat) m + d + y else d + m + y
-    }
-    var localDateStr by remember(dateValue) { mutableStateOf(TextFieldValue(dateValue, TextRange(0))) }
-
-    val timeValue = remember(time) {
-        val h = String.format(Locale.US, "%02d", time.hour)
-        val m = String.format(Locale.US, "%02d", time.minute)
-        h + m
-    }
-    var localTimeStr by remember(timeValue) { mutableStateOf(TextFieldValue(timeValue, TextRange(0))) }
-
-    val dateFocusRequester = remember { FocusRequester() }
-    val timeFocusRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
-    var isDateFocused by remember { mutableStateOf(false) }
-    var isTimeFocused by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-    ) {
-        TextMMD(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Gray,
-            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // DATE SECTION
-            Box(
-                modifier = Modifier.weight(1f)
-            ) {
-                BasicTextField(
-                    value = localDateStr,
-                    onValueChange = { newValue ->
-                        val oldStr = localDateStr.text
-                        val newStr = newValue.text
-                        val newCursor = newValue.selection.start
-
-                        if (newStr.length > oldStr.length) {
-                            val addedDigit = newStr.getOrNull(newCursor - 1)
-                            if (addedDigit != null && addedDigit.isDigit()) {
-                                val pos = newCursor - 1
-                                if (pos < 6) {
-                                    val isValid = when (pos) {
-                                        0 -> if (useAmericanDateFormat) addedDigit <= '1' else addedDigit <= '3'
-                                        2 -> if (useAmericanDateFormat) addedDigit <= '3' else addedDigit <= '1'
-                                        else -> true
-                                    }
-                                    if (isValid) {
-                                        val updatedText = oldStr.substring(0, pos) + addedDigit + oldStr.substring(pos + 1)
-                                        if (pos == 5) {
-                                            localDateStr = TextFieldValue(updatedText, TextRange(6))
-                                            try {
-                                                val p1 = updatedText.substring(0, 2).toInt()
-                                                val p2 = updatedText.substring(2, 4).toInt()
-                                                val p3 = 2000 + updatedText.substring(4, 6).toInt()
-                                                val newDate = if (useAmericanDateFormat) {
-                                                    LocalDate.of(p3, p1.coerceIn(1, 12), p2.coerceIn(1, 31))
-                                                } else {
-                                                    LocalDate.of(p3, p2.coerceIn(1, 12), p1.coerceIn(1, 31))
-                                                }
-                                                onDateChange(newDate)
-                                            } catch (e: Exception) {}
-                                            if (!isAllDay) {
-                                                localTimeStr = localTimeStr.copy(selection = TextRange(0))
-                                                timeFocusRequester.requestFocus()
-                                            } else {
-                                                focusManager.clearFocus()
-                                            }
-                                        } else {
-                                            localDateStr = TextFieldValue(updatedText, TextRange(pos + 1))
-                                        }
-                                    }
-                                }
-                            }
-                        } else if (newStr.length < oldStr.length) {
-                            localDateStr = newValue.copy(text = oldStr)
-                        } else {
-                            localDateStr = newValue
-                        }
-                    },
-                    modifier = Modifier
-                        .size(1.dp)
-                        .alpha(0f)
-                        .focusRequester(dateFocusRequester)
-                        .onFocusChanged { isDateFocused = it.isFocused }
-                        .onKeyEvent {
-                            if (it.key == Key.Backspace) {
-                                val pos = localDateStr.selection.start
-                                if (pos > 0) {
-                                    localDateStr = localDateStr.copy(selection = TextRange(pos - 1))
-                                }
-                                true
-                            } else false
-                        },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if (isAllDay) ImeAction.Done else ImeAction.Next),
-                    keyboardActions = KeyboardActions(onNext = { if (!isAllDay) timeFocusRequester.requestFocus() }, onDone = { focusManager.clearFocus() }),
-                    cursorBrush = SolidColor(Color.Transparent)
-                )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val currentText = localDateStr.text.padEnd(6, ' ')
-                    val cursor = if (isDateFocused) localDateStr.selection.start else -1
-
-                    if (useAmericanDateFormat) {
-                        DateSegment(currentText.substring(0, 2), cursor, 0, onClick = {
-                            localDateStr = localDateStr.copy(selection = TextRange(0))
-                            dateFocusRequester.requestFocus()
-                        })
-                        TextMMD("/", modifier = Modifier.padding(horizontal = 1.dp))
-                        DateSegment(currentText.substring(2, 4), cursor, 2, onClick = {
-                            localDateStr = localDateStr.copy(selection = TextRange(2))
-                            dateFocusRequester.requestFocus()
-                        })
-                    } else {
-                        DateSegment(currentText.substring(0, 2), cursor, 0, onClick = {
-                            localDateStr = localDateStr.copy(selection = TextRange(0))
-                            dateFocusRequester.requestFocus()
-                        })
-                        TextMMD("/", modifier = Modifier.padding(horizontal = 1.dp))
-                        DateSegment(currentText.substring(2, 4), cursor, 2, onClick = {
-                            localDateStr = localDateStr.copy(selection = TextRange(2))
-                            dateFocusRequester.requestFocus()
-                        })
-                    }
-                    TextMMD("/", modifier = Modifier.padding(horizontal = 1.dp))
-                    DateSegment(currentText.substring(4, 6), cursor, 4, onClick = {
-                        localDateStr = localDateStr.copy(selection = TextRange(4))
-                        dateFocusRequester.requestFocus()
-                    })
-                }
-            }
-
-            if (!isAllDay) {
-                Spacer(modifier = Modifier.width(8.dp))
-                // TIME SECTION
-                Box {
-                    BasicTextField(
-                        value = localTimeStr,
-                        onValueChange = { newValue ->
-                            val oldStr = localTimeStr.text
-                            val newStr = newValue.text
-                            val newCursor = newValue.selection.start
-
-                            if (newStr.length > oldStr.length) {
-                                val addedDigit = newStr.getOrNull(newCursor - 1)
-                                if (addedDigit != null && addedDigit.isDigit()) {
-                                    val pos = newCursor - 1
-                                    if (pos < 4) {
-                                        val isValid = when (pos) {
-                                            0 -> if (is24Hour) addedDigit <= '2' else addedDigit <= '1'
-                                            2 -> addedDigit <= '5'
-                                            else -> true
-                                        }
-                                        if (isValid) {
-                                            val updatedText = oldStr.substring(0, pos) + addedDigit + oldStr.substring(pos + 1)
-                                            if (pos == 3) {
-                                                localTimeStr = TextFieldValue(updatedText, TextRange(4))
-                                                try {
-                                                    val h24 = updatedText.substring(0, 2).toInt().coerceIn(0, 23)
-                                                    val m = updatedText.substring(2, 4).toInt().coerceIn(0, 59)
-                                                    onTimeChange(LocalTime.of(h24, m))
-                                                } catch (e: Exception) {}
-                                                focusManager.clearFocus()
-                                            } else {
-                                                localTimeStr = TextFieldValue(updatedText, TextRange(pos + 1))
-                                            }
-                                        }
-                                    }
-                                }
-                            } else if (newStr.length < oldStr.length) {
-                                localTimeStr = newValue.copy(text = oldStr)
-                            } else {
-                                localTimeStr = newValue
-                            }
-                        },
-                        modifier = Modifier
-                            .size(1.dp)
-                            .alpha(0f)
-                            .focusRequester(timeFocusRequester)
-                            .onFocusChanged { isTimeFocused = it.isFocused }
-                            .onKeyEvent {
-                                if (it.key == Key.Backspace) {
-                                    val pos = localTimeStr.selection.start
-                                    if (pos > 0) {
-                                        localTimeStr = localTimeStr.copy(selection = TextRange(pos - 1))
-                                    } else {
-                                        localDateStr = localDateStr.copy(selection = TextRange(5))
-                                        dateFocusRequester.requestFocus()
-                                    }
-                                    true
-                                } else false
-                            },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                        cursorBrush = SolidColor(Color.Transparent)
-                    )
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val displayHH = if (is24Hour) {
-                            localTimeStr.text.substring(0, 2)
-                        } else {
-                            val h24 = localTimeStr.text.substring(0, 2).toIntOrNull() ?: time.hour
-                            val h12 = if (h24 % 12 == 0) 12 else h24 % 12
-                            String.format(Locale.US, "%02d", h12)
-                        }
-                        val currentText = displayHH + localTimeStr.text.substring(2, 4)
-                        val cursor = if (isTimeFocused) localTimeStr.selection.start else -1
-                        
-                        DateSegment(currentText.substring(0, 2), cursor, 0, onClick = {
-                            localTimeStr = localTimeStr.copy(selection = TextRange(0))
-                            timeFocusRequester.requestFocus()
-                        })
-                        TextMMD(":", modifier = Modifier.padding(horizontal = 1.dp))
-                        DateSegment(currentText.substring(2, 4), cursor, 2, onClick = {
-                            localTimeStr = localTimeStr.copy(selection = TextRange(2))
-                            timeFocusRequester.requestFocus()
-                        })
-
-                        if (!is24Hour) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            val isPm = time.hour >= 12
-                            Box(
-                                modifier = Modifier
-                                    .border(1.dp, Color.Black, RoundedCornerShape(4.dp))
-                                    .clickable {
-                                        val newHour = if (isPm) time.hour - 12 else time.hour + 12
-                                        onTimeChange(time.withHour(newHour))
-                                    }
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                            ) {
-                                TextMMD(if (isPm) "PM" else "AM", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun DateSegment(value: String, cursor: Int, offset: Int, onClick: () -> Unit) {
-    Row(modifier = Modifier.clickable { onClick() }) {
-        DigitBox(value.getOrNull(0)?.toString() ?: "", cursor == offset)
-        DigitBox(value.getOrNull(1)?.toString() ?: "", cursor == offset + 1)
-    }
-}
 
 @Composable
 fun DigitBox(char: String, isHighlighted: Boolean) {
@@ -1388,11 +1092,11 @@ fun CompactOptionItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
         Spacer(modifier = Modifier.width(8.dp))
         TextMMD(
             text = title,
-            fontSize = 15.sp,
+            fontSize = EinkType.Body,
             fontWeight = FontWeight.Medium,
             maxLines = 1
         )
@@ -1420,31 +1124,28 @@ fun OptionRow(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
             if (icon != null) {
-                Icon(icon, contentDescription = null, tint = if (enabled) Color.Black else Color.LightGray, modifier = Modifier.size(20.dp))
+                Icon(icon, contentDescription = null, tint = EinkColors.Ink, modifier = Modifier.size(24.dp))
             } else {
-                Spacer(modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.size(24.dp))
             }
             Spacer(modifier = Modifier.width(8.dp))
             TextMMD(
                 text = title,
-                fontSize = 15.sp,
-                color = if (enabled) Color.Black else Color.LightGray,
-                fontWeight = FontWeight.Medium,
+                fontSize = EinkType.Body,
+                color = EinkColors.Ink,
+                fontWeight = if (enabled) FontWeight.Medium else FontWeight.Normal,
                 maxLines = 1
             )
         }
         if (checked != null && onCheckedChange != null) {
+            // Full-size switch: the old 0.6 scale made a 20dp target.
             SwitchMMD(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
-                enabled = enabled,
-                modifier = Modifier
-                    .scale(0.6f)
-                    .padding(horizontal = 4.dp, vertical = 0.dp)
-                    .size(20.dp)
+                enabled = enabled
             )
         } else if (hasChevron) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
         }
     }
 }

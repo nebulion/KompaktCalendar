@@ -178,7 +178,7 @@ class EventAlertActivity : ComponentActivity() {
                 Icon(
                     Icons.Default.Close,
                     contentDescription = "Close",
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(com.kompakt.calendar.ui.mmd.EinkTokens.HeaderGlyph)
                 )
             }
 
@@ -207,10 +207,10 @@ class EventAlertActivity : ComponentActivity() {
 
                 TextMMD(
                     text = event.title.ifBlank { "Untitled event" },
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = com.kompakt.calendar.ui.mmd.EinkType.Headline,
+                    fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
-                    lineHeight = 38.sp
+                    lineHeight = 34.sp
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -236,7 +236,7 @@ class EventAlertActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                DashedDivider(dashWidth = 5.dp, dashGap = 5.dp)
+                DashedDivider()
 
                 Spacer(modifier = Modifier.weight(1f))
 
@@ -304,25 +304,10 @@ class EventAlertActivity : ComponentActivity() {
             color = Color.White
         ) {
             Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                    TextMMD(
-                        "Snooze for...",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-
-                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Black))
+                com.kompakt.calendar.ui.mmd.ScreenHeader(
+                    title = "Snooze for",
+                    navigationIcon = { com.kompakt.calendar.ui.mmd.HeaderAction(Icons.Default.Close, "Close", onDismiss) }
+                )
 
                 Column(
                     modifier = Modifier
@@ -337,7 +322,7 @@ class EventAlertActivity : ComponentActivity() {
                                 .padding(vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TextMMD(label, fontSize = 18.sp)
+                            TextMMD(label, fontSize = com.kompakt.calendar.ui.mmd.EinkType.TitleMedium)
                         }
                         DashedDivider()
                     }
@@ -349,7 +334,7 @@ class EventAlertActivity : ComponentActivity() {
                             .padding(vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextMMD("Custom...", fontSize = 18.sp, color = Color.Gray)
+                        TextMMD("Custom…", fontSize = com.kompakt.calendar.ui.mmd.EinkType.TitleMedium, color = Color.Black)
                     }
                 }
             }
@@ -369,22 +354,11 @@ class EventAlertActivity : ComponentActivity() {
             color = Color.White
         ) {
             Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                    TextMMD(
-                        "Custom Snooze",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 8.dp).weight(1f)
-                    )
+                com.kompakt.calendar.ui.mmd.ScreenHeader(
+                    title = "Custom Snooze",
+                    navigationIcon = { com.kompakt.calendar.ui.mmd.HeaderAction(Icons.Default.Close, "Close", onDismiss) },
+                    actions = {
+                    // The one committing action: a solid header button.
                     ButtonMMD(
                         onClick = {
                             val minutes = when (unit) {
@@ -397,11 +371,10 @@ class EventAlertActivity : ComponentActivity() {
                         },
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        TextMMD("Snooze", fontWeight = FontWeight.Bold)
+                        TextMMD("Snooze", fontSize = com.kompakt.calendar.ui.mmd.EinkType.Body, fontWeight = FontWeight.Bold)
                     }
-                }
-
-                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Black))
+                    }
+                )
 
                 Column(
                     modifier = Modifier
@@ -437,7 +410,7 @@ class EventAlertActivity : ComponentActivity() {
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
-                    TextMMD("from now", fontSize = 16.sp)
+                    TextMMD("from now", fontSize = com.kompakt.calendar.ui.mmd.EinkType.Body)
                 }
             }
         }
@@ -457,12 +430,12 @@ class EventAlertActivity : ComponentActivity() {
             modifier = modifier,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            IconButton(onClick = onUp, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.ArrowDropUp, contentDescription = "Up", modifier = Modifier.size(48.dp))
+            IconButton(onClick = onUp, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.ArrowDropUp, contentDescription = "Up", modifier = Modifier.size(40.dp))
             }
 
             prevLabels.forEach {
-                TextMMD(it, fontSize = 12.sp, color = Color.Black)
+                TextMMD(it, fontSize = com.kompakt.calendar.ui.mmd.EinkType.Label, color = Color.Black)
                 Spacer(modifier = Modifier.height(2.dp))
             }
 
@@ -477,13 +450,13 @@ class EventAlertActivity : ComponentActivity() {
                 Row(verticalAlignment = Alignment.Bottom) {
                     TextMMD(
                         text = label,
-                        fontSize = 22.sp,
+                        fontSize = com.kompakt.calendar.ui.mmd.EinkType.Title,
                         fontWeight = FontWeight.Bold
                     )
                     if (subLabel != null) {
                         TextMMD(
                             text = subLabel,
-                            fontSize = 10.sp,
+                            fontSize = com.kompakt.calendar.ui.mmd.EinkType.Label,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(start = 2.dp, bottom = 2.dp)
                         )
@@ -493,11 +466,11 @@ class EventAlertActivity : ComponentActivity() {
 
             nextLabels.forEach {
                 Spacer(modifier = Modifier.height(2.dp))
-                TextMMD(it, fontSize = 12.sp, color = Color.Black)
+                TextMMD(it, fontSize = com.kompakt.calendar.ui.mmd.EinkType.Label, color = Color.Black)
             }
 
-            IconButton(onClick = onDown, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.ArrowDropDown, contentDescription = "Down", modifier = Modifier.size(48.dp))
+            IconButton(onClick = onDown, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.ArrowDropDown, contentDescription = "Down", modifier = Modifier.size(40.dp))
             }
         }
     }

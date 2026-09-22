@@ -29,9 +29,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.kompakt.calendar.ui.common.DashedDivider
+import com.kompakt.calendar.ui.mmd.EinkColors
+import com.kompakt.calendar.ui.mmd.EinkType
+import com.kompakt.calendar.ui.mmd.HeaderAction
+import com.kompakt.calendar.ui.mmd.HeaderTitle
+import com.kompakt.calendar.ui.mmd.ScreenHeader
 import com.mudita.mmd.components.buttons.FloatingActionButtonMMD
 import com.mudita.mmd.components.text.TextMMD
-import com.mudita.mmd.components.top_app_bar.TopAppBarMMD
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -53,52 +57,21 @@ fun CalendarScreen(
 
     Scaffold(
         topBar = {
-            TopAppBarMMD(
+            // 360dp wide: two 48dp arrows + three 48dp actions leave room for a
+            // short month name ("Sep 2026") at the 24sp title size.
+            ScreenHeader(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { viewModel.previousMonth() }, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                contentDescription = "Previous Month",
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        TextMMD(
-                            text = "${currentMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${currentMonth.year}",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 2.dp)
-                        )
-                        IconButton(onClick = { viewModel.nextMonth() }, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Next Month",
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
+                        HeaderAction(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous Month", { viewModel.previousMonth() })
+                        HeaderTitle("${currentMonth.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${currentMonth.year}")
+                        HeaderAction(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next Month", { viewModel.nextMonth() })
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { navController.navigate("agenda") },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Outlined.ViewAgenda, contentDescription = "Agenda", modifier = Modifier.size(24.dp))
-                    }
-                    IconButton(
-                        onClick = { navController.navigate("event_search") },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(24.dp))
-                    }
-                    IconButton(
-                        onClick = { navController.navigate("settings") },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp))
-                    }
-                },
-                showDivider = true
+                    HeaderAction(Icons.Outlined.ViewAgenda, "Agenda", { navController.navigate("agenda") })
+                    HeaderAction(Icons.Default.Search, "Search", { navController.navigate("event_search") })
+                    HeaderAction(Icons.Outlined.Settings, "Settings", { navController.navigate("settings") })
+                }
             )
         },
         floatingActionButton = {
@@ -119,14 +92,14 @@ fun CalendarScreen(
                             Icon(
                                 Icons.Default.Today,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(24.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             TextMMD(
                                 text = "Today",
-                                fontSize = 12.sp,
+                                fontSize = EinkType.Body,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.Black
+                                color = EinkColors.Ink
                             )
                         }
                     }
@@ -233,7 +206,7 @@ fun DaysOfWeekHeader(startDayMonday: Boolean, showWeekNumbers: Boolean) {
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Normal,
-                fontSize = 15.sp
+                fontSize = EinkType.Small
             )
         }
     }
@@ -322,7 +295,7 @@ fun WeekNumberCell(firstDayOfWeek: LocalDate) {
     ) {
         TextMMD(
             text = weekNum.toString(),
-            fontSize = 12.sp,
+            fontSize = EinkType.Label,
             textAlign = TextAlign.Center
         )
     }
@@ -373,11 +346,13 @@ fun DayCell(
                     ),
                 contentAlignment = Alignment.Center
             ) {
+                // Black and white only: another month's days are regular weight,
+                // this month's bold, today inverted.
                 TextMMD(
                     text = date.dayOfMonth.toString(),
-                    color = if (isActiveDay) Color.White else (if (isCurrentMonth) Color.Black else MaterialTheme.colorScheme.outline),
+                    color = if (isActiveDay) EinkColors.Paper else EinkColors.Ink,
                     fontWeight = if (isActiveDay || isCurrentMonth) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 17.sp
+                    fontSize = EinkType.Body
                 )
             }
 

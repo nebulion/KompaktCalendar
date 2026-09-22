@@ -4,6 +4,7 @@ import android.text.format.DateFormat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
@@ -16,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -24,12 +27,20 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.kompakt.calendar.calendar.CalendarEvent
-import com.kompakt.calendar.ui.EInkScrollbar
 import com.kompakt.calendar.ui.common.DashedDivider
-import com.kompakt.calendar.ui.eInkVerticalScroll
+import com.kompakt.calendar.ui.mmd.PagedList
+import com.kompakt.calendar.ui.mmd.EinkColors
+import com.kompakt.calendar.ui.mmd.EinkRowTokens
+import com.kompakt.calendar.ui.mmd.RowDivider
+import com.kompakt.calendar.ui.mmd.SectionHeader
+import com.kompakt.calendar.ui.mmd.EinkType
+import com.kompakt.calendar.ui.mmd.HeaderAction
+import com.kompakt.calendar.ui.mmd.PageLoading
+import com.kompakt.calendar.ui.mmd.ScreenHeader
 import com.mudita.mmd.components.text.TextMMD
-import com.mudita.mmd.components.top_app_bar.TopAppBarMMD
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.*
@@ -45,38 +56,44 @@ fun EventSearchScreen(
     var isSearching by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
+    // Open with the cursor in the search box, so typing works at once.
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { searchFocus.requestFocus() }
 
     val listState = rememberLazyListState()
     val canScrollForward by remember { derivedStateOf { listState.canScrollForward } }
     val canScrollBackward by remember { derivedStateOf { listState.canScrollBackward } }
     val isScrollable by remember { derivedStateOf { canScrollForward || canScrollBackward } }
 
+    // A new query cancels the previous search, so an old result never replaces a newer one.
     LaunchedEffect(searchQuery) {
-        if (searchQuery.isNotBlank()) {
-            isSearching = true
-            scope.launch {
-                results = viewModel.search(searchQuery)
-                isSearching = false
-            }
-        } else {
+        if (searchQuery.isBlank()) {
             results = emptyList()
+            isSearching = false
+            return@LaunchedEffect
         }
+        isSearching = true
+        delay(300)
+        results = viewModel.search(searchQuery)
+        isSearching = false
     }
+    val now = remember(results) { LocalDateTime.now() }
+    val upcoming = remember(results) { results.filter { !it.end.isBefore(now) }.sortedBy { it.start } }
+    val past = remember(results) { results.filter { it.end.isBefore(now) }.sortedByDescending { it.start } }
 
     Scaffold(
         topBar = {
-            TopAppBarMMD(
+            ScreenHeader(
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
+                    HeaderAction(Icons.AutoMirrored.Filled.ArrowBack, "Back", { navController.popBackStack() })
                 },
                 title = {
+                    // Black and white only: the placeholder is black text, not grey.
                     TextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { TextMMD("Search events...", color = MaterialTheme.colorScheme.outline) },
-                        modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
+                        placeholder = { TextMMD("Search events", color = EinkColors.Ink, fontSize = EinkType.TitleMedium) },
+                        modifier = Modifier.fillMaxWidth().padding(end = 4.dp).focusRequester(searchFocus),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
@@ -86,17 +103,12 @@ fun EventSearchScreen(
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent
                         ),
-                        textStyle = LocalTextStyle.current.copy(fontSize = 16.sp)
+                        textStyle = LocalTextStyle.current.copy(fontSize = EinkType.TitleMedium, color = EinkColors.Ink)
                     )
                 },
                 actions = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(
-                            onClick = { searchQuery = "" },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(20.dp))
-                        }
+                        HeaderAction(Icons.Default.Close, "Clear", { searchQuery = "" })
                     }
                 }
             )
@@ -116,17 +128,12 @@ fun EventSearchScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     TextMMD(
-                        "Search for events by title or notes",
-                        fontSize = 16.sp
+                        "Search titles, notes, and places",
+                        fontSize = EinkType.TitleMedium
                     )
                 }
             } else if (isSearching) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
+                PageLoading(label = "Searching")
             } else if (results.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -134,40 +141,38 @@ fun EventSearchScreen(
                         .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    TextMMD("No events found", fontSize = 16.sp)
+                    TextMMD("No events found", fontSize = EinkType.TitleMedium)
                 }
             } else {
                 Row(modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(
+                    PagedList(
                         state = listState,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .eInkVerticalScroll(listState, scope, isScrollable),
-                        userScrollEnabled = false
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
                     ) {
-                        itemsIndexed(results) { index, event ->
-                            EventSearchResultItem(
-                                event = event,
-                                onClick = {
-                                    val time = event.start.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                                    navController.navigate("event_detail/${event.id}?instanceTime=$time")
-                                }
-                            )
-                            if (index < results.size - 1) {
-                                DashedDivider(modifier = Modifier.padding(start = 16.dp))
-                            }
-                        }
+                        resultSection("Upcoming", upcoming, navController)
+                        resultSection("Past", past, navController)
                         item {
                             Spacer(modifier = Modifier.height(32.dp))
                         }
                     }
-                    if (isScrollable) {
-                        EInkScrollbar(state = listState, scope = scope)
-                    }
                 }
             }
         }
+    }
+}
+
+private fun LazyListScope.resultSection(title: String, events: List<CalendarEvent>, navController: NavController) {
+    if (events.isEmpty()) return
+    item { SectionHeader(title) }
+    itemsIndexed(events) { index, event ->
+        if (index > 0) RowDivider()
+        EventSearchResultItem(
+            event = event,
+            onClick = {
+                val time = event.start.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                navController.navigate("event_detail/${event.id}?instanceTime=$time")
+            }
+        )
     }
 }
 
@@ -176,31 +181,34 @@ private fun EventSearchResultItem(event: CalendarEvent, onClick: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val is24Hour = DateFormat.is24HourFormat(context)
     val timePattern = if (is24Hour) "HH:mm" else "h:mm a"
+    val datePattern = if (event.start.year == LocalDate.now().year) "EEE, d MMM" else "EEE, d MMM yyyy"
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .heightIn(min = EinkRowTokens.MinHeight)
+            .padding(horizontal = EinkRowTokens.Inset, vertical = EinkRowTokens.VerticalPadding),
+        verticalArrangement = Arrangement.Center
     ) {
         TextMMD(
             text = event.title,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = EinkType.TitleMedium,
+            fontWeight = FontWeight.Bold,
             maxLines = 1
         )
         TextMMD(
             text = if (event.allDay)
-                event.start.toLocalDate().format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.US))
+                event.start.toLocalDate().format(DateTimeFormatter.ofPattern(datePattern, Locale.US))
             else
-                event.start.format(DateTimeFormatter.ofPattern("EEE, d MMM · $timePattern", Locale.US)),
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 4.dp)
+                event.start.format(DateTimeFormatter.ofPattern("$datePattern · $timePattern", Locale.US)),
+            fontSize = EinkType.Body,
+            modifier = Modifier.padding(top = 2.dp)
         )
         if (!event.location.isNullOrBlank()) {
             TextMMD(
                 text = event.location!!,
-                fontSize = 12.sp,
+                fontSize = EinkType.Body,
                 maxLines = 1,
                 modifier = Modifier.padding(top = 2.dp)
             )

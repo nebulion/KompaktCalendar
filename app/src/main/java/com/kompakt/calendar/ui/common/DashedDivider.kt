@@ -1,38 +1,25 @@
 package com.kompakt.calendar.ui.common
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import com.kompakt.calendar.ui.mmd.DashedDividerMMD
+import com.kompakt.calendar.ui.mmd.EinkColors
+import com.kompakt.calendar.ui.mmd.EinkTokens
 
+/**
+ * The dotted row divider. Kept for the existing call sites; it draws [DashedDividerMMD], the
+ * calibrated one-pixel black dotted line. The old thickness and dash parameters are accepted
+ * and ignored, so every row divider in the app looks the same.
+ */
 @Composable
 fun DashedDivider(
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.outline,
-    thickness: Dp = 1.dp,
-    dashWidth: Dp = 2.dp,
-    dashGap: Dp = 2.dp,
+    @Suppress("UNUSED_PARAMETER") color: Color = EinkColors.Ink,
+    @Suppress("UNUSED_PARAMETER") thickness: Dp = EinkTokens.DividerDot,
+    @Suppress("UNUSED_PARAMETER") dashWidth: Dp = EinkTokens.DividerDot,
+    @Suppress("UNUSED_PARAMETER") dashGap: Dp = EinkTokens.DividerGap,
 ) {
-    Canvas(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(thickness)
-    ) {
-        drawLine(
-            color = color,
-            start = Offset(0f, size.height / 2),
-            end = Offset(size.width, size.height / 2),
-            strokeWidth = thickness.toPx(),
-            pathEffect = PathEffect.dashPathEffect(
-                floatArrayOf(dashWidth.toPx(), dashGap.toPx()), 0f
-            )
-        )
-    }
+    DashedDividerMMD(modifier = modifier)
 }

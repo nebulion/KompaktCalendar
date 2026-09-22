@@ -36,10 +36,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.kompakt.calendar.ui.EInkScrollbar
-import com.kompakt.calendar.ui.eInkVerticalScroll
+import com.kompakt.calendar.ui.mmd.PagedList
 import com.mudita.mmd.components.buttons.ButtonMMD
-import com.mudita.mmd.components.divider.HorizontalDividerMMD
+import com.kompakt.calendar.ui.common.DashedDivider
+import com.kompakt.calendar.ui.mmd.EinkType
 import com.mudita.mmd.components.text.TextMMD
 import kotlinx.coroutines.launch
 
@@ -133,7 +133,7 @@ fun OnboardingScreen(
                 ) {
                     TextMMD(
                         text = if (canFinish) "Start using KompaktCalendar" else "Grant Calendar Access to start",
-                        fontSize = 16.sp,
+                        fontSize = EinkType.Body,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -147,20 +147,16 @@ fun OnboardingScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            LazyColumn(
+            PagedList(
                 state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .eInkVerticalScroll(listState, scope, isScrollable),
-                userScrollEnabled = false,
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                     TextMMD(
                         text = "Welcome",
-                        fontSize = 24.sp,
+                        fontSize = EinkType.Title,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
@@ -168,7 +164,7 @@ fun OnboardingScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     TextMMD(
                         text = "We need these permissions for reliable e-ink reminders.",
-                        fontSize = 14.sp,
+                        fontSize = EinkType.Body,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -185,7 +181,7 @@ fun OnboardingScreen(
                             calendarLauncher.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))
                         }
                     )
-                    HorizontalDividerMMD(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+                    DashedDivider()
                 }
 
                 item {
@@ -204,7 +200,7 @@ fun OnboardingScreen(
                             }
                         }
                     )
-                    HorizontalDividerMMD(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+                    DashedDivider()
                 }
 
                 item {
@@ -219,7 +215,7 @@ fun OnboardingScreen(
                             }
                         }
                     )
-                    HorizontalDividerMMD(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+                    DashedDivider()
                 }
 
                 item {
@@ -232,7 +228,7 @@ fun OnboardingScreen(
                             context.startActivity(intent)
                         }
                     )
-                    HorizontalDividerMMD(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+                    DashedDivider()
                 }
 
                 item {
@@ -246,7 +242,7 @@ fun OnboardingScreen(
                         }
                     )
                     if (isDuraSpeedAvailable) {
-                        HorizontalDividerMMD(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+                        DashedDivider()
                     }
                 }
 
@@ -283,10 +279,6 @@ fun OnboardingScreen(
                     }
                 }
             }
-
-            if (isScrollable) {
-                EInkScrollbar(state = listState, scope = scope)
-            }
         }
     }
 }
@@ -308,13 +300,13 @@ private fun OnboardingPermissionRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextMMD(text = title, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                TextMMD(text = title, fontSize = EinkType.TitleMedium, fontWeight = FontWeight.Bold)
                 if (isRequired && !isGranted) {
                     Spacer(modifier = Modifier.width(6.dp))
-                    TextMMD(text = "(Req.)", fontSize = 11.sp)
+                    TextMMD(text = "(Req.)", fontSize = EinkType.Label)
                 }
             }
-            TextMMD(text = description, fontSize = 13.sp)
+            TextMMD(text = description, fontSize = EinkType.Body)
         }
         Spacer(modifier = Modifier.width(12.dp))
         Icon(

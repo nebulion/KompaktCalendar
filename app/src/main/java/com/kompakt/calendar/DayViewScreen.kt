@@ -5,7 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -36,10 +36,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.kompakt.calendar.calendar.CalendarEvent
+import com.kompakt.calendar.ui.mmd.DashedDividerMMD
+import com.kompakt.calendar.ui.mmd.EinkColors
+import com.kompakt.calendar.ui.mmd.EinkType
+import com.kompakt.calendar.ui.mmd.HeaderAction
+import com.kompakt.calendar.ui.mmd.ScreenHeader
 import com.mudita.mmd.components.buttons.FloatingActionButtonMMD
-import com.mudita.mmd.components.divider.HorizontalDividerMMD
 import com.mudita.mmd.components.text.TextMMD
-import com.mudita.mmd.components.top_app_bar.TopAppBarMMD
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -69,51 +72,39 @@ fun DayViewScreen(
 
     Scaffold(
         topBar = {
-            TopAppBarMMD(
+            // Short month ("22 Sep") so the 24sp date fits between 48dp arrows
+            // and three 48dp actions on the 360dp screen.
+            ScreenHeader(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { viewModel.previousDay() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous Day", modifier = Modifier.size(24.dp))
-                        }
-                        Column(modifier = Modifier.padding(horizontal = 2.dp)) {
+                        HeaderAction(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous Day", { viewModel.previousDay() })
+                        Column {
                             TextMMD(
                                 text = selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault()),
-                                fontSize = 12.sp,
-                                lineHeight = 12.sp
+                                fontSize = EinkType.Label,
+                                lineHeight = 16.sp
                             )
+                            val month = selectedDate.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())
                             val dateText = if (useAmericanDateFormat) {
-                                "${selectedDate.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${selectedDate.dayOfMonth}"
+                                "$month ${selectedDate.dayOfMonth}"
                             } else {
-                                "${selectedDate.dayOfMonth} ${selectedDate.month.getDisplayName(TextStyle.FULL, Locale.getDefault())}"
+                                "${selectedDate.dayOfMonth} $month"
                             }
                             TextMMD(
                                 text = dateText,
-                                fontSize = 22.sp,
+                                fontSize = EinkType.Title,
                                 fontWeight = FontWeight.Bold,
-                                lineHeight = 22.sp
+                                lineHeight = 26.sp,
+                                maxLines = 1
                             )
                         }
-                        IconButton(onClick = { viewModel.nextDay() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next Day", modifier = Modifier.size(24.dp))
-                        }
+                        HeaderAction(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next Day", { viewModel.nextDay() })
                     }
                 },
                 actions = {
-                    IconButton(onClick = { navController.navigate("calendar") }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.CalendarMonth, contentDescription = "Calendar", modifier = Modifier.size(24.dp))
-                    }
-                    IconButton(
-                        onClick = { navController.navigate("event_search") },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(24.dp))
-                    }
-                    IconButton(
-                        onClick = { navController.navigate("settings") },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp))
-                    }
+                    HeaderAction(Icons.Outlined.CalendarMonth, "Calendar", { navController.navigate("calendar") })
+                    HeaderAction(Icons.Default.Search, "Search", { navController.navigate("event_search") })
+                    HeaderAction(Icons.Outlined.Settings, "Settings", { navController.navigate("settings") })
                 }
             )
         },
@@ -122,8 +113,7 @@ fun DayViewScreen(
                 onClick = {
                     viewModel.beginNewEvent()
                     navController.navigate("add_event?fromCalendar=false")
-                },
-                modifier = Modifier.padding(end = 0.dp, bottom = 8.dp)
+                }
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Event", modifier = Modifier.size(32.dp))
             }
@@ -226,20 +216,20 @@ private fun AllDayBar(events: List<CalendarEvent>, onEventClick: (CalendarEvent)
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        TextMMD("All-day", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        TextMMD("All-day", fontSize = EinkType.Label, fontWeight = FontWeight.Bold)
         events.forEach { ev ->
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 2.dp)
-                    .border(1.dp, Color.Black, RoundedCornerShape(4.dp))
+                    .border(1.dp, EinkColors.Ink, RoundedCornerShape(4.dp))
                     .clickable { onEventClick(ev) }
                     .padding(horizontal = 6.dp, vertical = 4.dp)
             ) {
-                TextMMD(ev.title, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                TextMMD(ev.title, fontSize = EinkType.TitleSmall, fontWeight = FontWeight.Medium, maxLines = 1)
             }
         }
-        HorizontalDividerMMD(thickness = 1.dp)
+        DashedDividerMMD(modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -259,7 +249,6 @@ fun TimeSlotLabel(hour: Int, height: Dp) {
         }
     }
 
-    val outline = MaterialTheme.colorScheme.outline
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -268,29 +257,20 @@ fun TimeSlotLabel(hour: Int, height: Dp) {
     ) {
         TextMMD(
             text = displayHour,
-            fontSize = 13.sp,
+            fontSize = EinkType.Label,
             modifier = Modifier
                 .width(52.dp)
                 .align(Alignment.TopStart)
                 .padding(top = 4.dp)
         )
 
-        Canvas(
+        // The calibrated black dotted hairline, not a grey half-dp dash.
+        DashedDividerMMD(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
                 .padding(start = 48.dp, end = 8.dp)
                 .align(Alignment.TopStart)
                 .offset(y = 14.dp)
-        ) {
-            drawLine(
-                color = outline,
-                start = Offset(0f, 0f),
-                end = Offset(size.width, 0f),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 4f), 0f),
-                strokeWidth = 0.5.dp.toPx()
-            )
-        }
+        )
     }
 }
 
@@ -313,9 +293,10 @@ fun TimeGridOverlay(
     val rangeEnd = if (endHour == 23) LocalTime.MAX else LocalTime.of(endHour + 1, 0)
 
     var currentTime by remember { mutableStateOf(LocalTime.now()) }
+    // The now-line moves once a minute: each move is an E Ink repaint.
     LaunchedEffect(Unit) {
         while (true) {
-            delay(30_000L)
+            delay(60_000L)
             currentTime = LocalTime.now()
         }
     }
@@ -414,6 +395,7 @@ fun TimeGridOverlay(
                 val height = slotHeight * (durationMinutes / 60f)
 
                 var dragOffset by remember { mutableStateOf(0f) }
+                var isHeld by remember { mutableStateOf(false) }
 
                 Box(
                     modifier = Modifier
@@ -422,20 +404,25 @@ fun TimeGridOverlay(
                         .offset(x = leftOffset, y = topOffsetInitial + dragOffset.dp)
                         .padding(1.dp)
                         .background(Color.White, RoundedCornerShape(4.dp))
-                        .border(1.dp, Color.Black, RoundedCornerShape(4.dp))
+                        // A held event gets a heavy border, so it is clear what the drag will move.
+                        .border(if (isHeld) 3.dp else 1.dp, Color.Black, RoundedCornerShape(4.dp))
                         .pointerInput(ev.id) {
-                            detectDragGestures(
-                                onDragStart = { dragOffset = 0f },
+                            // Hold first, then drag: a plain swipe over an event pages the day instead.
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { dragOffset = 0f; isHeld = true },
                                 onDragEnd = {
+                                    isHeld = false
                                     val minutesDragged = (dragOffset.dp.toPx() / slotHeight.toPx()) * 60
-                                    val totalMinutes = (actualStart.toSecondOfDay() / 60f) + minutesDragged
-                                    val snappedMinutes = ((totalMinutes + 7.5f) / 15).toInt() * 15
-                                    val finalMinutes = snappedMinutes.coerceIn(0, 1439)
-                                    val newTime = LocalTime.of(finalMinutes / 60, finalMinutes % 60)
-                                    onEventMoved(ev, newTime)
+                                    // Held and let go without moving a quarter hour: the event stays put.
+                                    if (kotlin.math.abs(minutesDragged) >= 7.5f) {
+                                        val totalMinutes = (actualStart.toSecondOfDay() / 60f) + minutesDragged
+                                        val snappedMinutes = ((totalMinutes + 7.5f) / 15).toInt() * 15
+                                        val finalMinutes = snappedMinutes.coerceIn(0, 1439)
+                                        onEventMoved(ev, LocalTime.of(finalMinutes / 60, finalMinutes % 60))
+                                    }
                                     dragOffset = 0f
                                 },
-                                onDragCancel = { dragOffset = 0f },
+                                onDragCancel = { dragOffset = 0f; isHeld = false },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
                                     dragOffset += dragAmount.y / density
@@ -443,25 +430,29 @@ fun TimeGridOverlay(
                             )
                         }
                         .clickable { onEventClick(ev) }
-                        .padding(4.dp)
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
                 ) {
+                    // 14sp lines are about 17dp tall; an hour is about 44dp. The
+                    // time and location lines only show when the block has room.
                     Column {
-                        TextMMD(ev.title, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        if (height.value > 25f) {
+                        TextMMD(ev.title, fontSize = EinkType.Label, fontWeight = FontWeight.Bold, maxLines = 1, lineHeight = 17.sp)
+                        if (height.value >= 38f) {
                             val context = androidx.compose.ui.platform.LocalContext.current
                             val is24Hour = DateFormat.is24HourFormat(context)
                             val timePattern = if (is24Hour) "HH:mm" else "h:mm a"
                             val timeFormatter = DateTimeFormatter.ofPattern(timePattern)
                             TextMMD(
                                 "${ev.start.toLocalTime().format(timeFormatter)}",
-                                fontSize = 9.sp,
-                                lineHeight = 10.sp
+                                fontSize = EinkType.Label,
+                                lineHeight = 17.sp,
+                                maxLines = 1
                             )
                         }
-                        if (height.value > 40f && !ev.location.isNullOrBlank()) {
+                        if (height.value >= 56f && !ev.location.isNullOrBlank()) {
                             TextMMD(
                                 text = ev.location,
-                                fontSize = 9.sp,
+                                fontSize = EinkType.Label,
+                                lineHeight = 17.sp,
                                 maxLines = 1
                             )
                         }
@@ -502,10 +493,10 @@ fun TimeGridOverlay(
                         modifier = Modifier
                             .size(width = 20.dp, height = 4.dp)
                             .background(
-                                color = if (i == columnOffset) Color.Black else MaterialTheme.colorScheme.outline,
+                                color = if (i == columnOffset) EinkColors.Ink else EinkColors.Paper,
                                 shape = RoundedCornerShape(2.dp)
                             )
-                            .border(0.5.dp, Color.Black, RoundedCornerShape(2.dp))
+                            .border(1.dp, EinkColors.Ink, RoundedCornerShape(2.dp))
                             .clickable {
                                 if (i != columnOffset) onColumnOffsetChange(i)
                             }
@@ -532,20 +523,23 @@ fun DayViewScrollIndicator(currentPage: Int, onPageSelected: (Int) -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         for (i in 0..2) {
+            // The bar is 6dp wide, but the whole 24dp column is the tap target.
             Box(
                 modifier = Modifier
-                    .size(width = 6.dp, height = 80.dp)
-                    .background(
-                        color = if (i == currentPage) Color.Black else Color.Transparent,
-                        shape = RoundedCornerShape(3.dp)
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = Color.Black,
-                        shape = RoundedCornerShape(3.dp)
-                    )
-                    .clickable { onPageSelected(i) }
-            )
+                    .size(width = 24.dp, height = 80.dp)
+                    .clickable { onPageSelected(i) },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 6.dp, height = 80.dp)
+                        .background(
+                            color = if (i == currentPage) EinkColors.Ink else EinkColors.Paper,
+                            shape = RoundedCornerShape(3.dp)
+                        )
+                        .border(width = 1.dp, color = EinkColors.Ink, shape = RoundedCornerShape(3.dp))
+                )
+            }
             if (i < 2) Spacer(modifier = Modifier.height(8.dp))
         }
     }

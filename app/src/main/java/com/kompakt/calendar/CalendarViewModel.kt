@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.kompakt.calendar.calendar.CalendarAccount
 import com.kompakt.calendar.calendar.CalendarEvent
 import com.kompakt.calendar.calendar.CalendarRepository
+import com.kompakt.calendar.calendar.DraftSpan
 import com.kompakt.calendar.data.UserPreferencesRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,11 +36,15 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs: UserPreferencesRepository =
         (app as MyApplication).userPreferencesRepository
 
+    // The requested day and month change at once; the shown ones change only when their
+    // events have loaded, so each screen paints once with the new date and its events.
     private val _selectedDate = MutableStateFlow(LocalDate.now())
-    val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
+    private val _shownDate = MutableStateFlow(_selectedDate.value)
+    val selectedDate: StateFlow<LocalDate> = _shownDate.asStateFlow()
 
     private val _currentMonth = MutableStateFlow(YearMonth.now())
-    val currentMonth: StateFlow<YearMonth> = _currentMonth.asStateFlow()
+    private val _shownMonth = MutableStateFlow(_currentMonth.value)
+    val currentMonth: StateFlow<YearMonth> = _shownMonth.asStateFlow()
 
     private val _agendaPage = MutableStateFlow(getPageForCurrentTime())
     val agendaPage: StateFlow<Int> = _agendaPage.asStateFlow()
@@ -76,36 +81,30 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     var draftRruleDays = MutableStateFlow<Set<Int>>(emptySet())
 
     fun updateDraftTitle(v: String) { draftTitle.value = v }
-    fun updateDraftStartDate(v: LocalDate) { draftStartDate.value = v }
-    fun updateDraftEndDate(v: LocalDate) { draftEndDate.value = v }
-    fun updateDraftStartTime(v: java.time.LocalTime) {
-        val oldStart = draftStartTime.value
-        val oldEnd = draftEndTime.value
-        val duration = java.time.Duration.between(oldStart, oldEnd)
-        
-        draftStartTime.value = v
-        val newEnd = v.plus(duration)
-        draftEndTime.value = newEnd
-        
-        // Adjust end date if it wrapped around midnight
-        if (newEnd.isBefore(v) && !oldEnd.isBefore(oldStart)) {
-            draftEndDate.value = draftEndDate.value.plusDays(1)
-        } else if (v.isBefore(oldStart) && oldEnd.isBefore(oldStart) && !newEnd.isBefore(v)) {
-             draftEndDate.value = draftEndDate.value.minusDays(1)
-        }
+    private fun draftSpan() = DraftSpan(
+        java.time.LocalDateTime.of(draftStartDate.value, draftStartTime.value),
+        java.time.LocalDateTime.of(draftEndDate.value, draftEndTime.value),
+    )
+
+    private fun setDraftSpan(span: DraftSpan) {
+        draftStartDate.value = span.start.toLocalDate()
+        draftStartTime.value = span.start.toLocalTime()
+        draftEndDate.value = span.end.toLocalDate()
+        draftEndTime.value = span.end.toLocalTime()
     }
 
-    fun updateDraftEndTime(v: java.time.LocalTime) {
-        draftEndTime.value = v
-        val start = draftStartTime.value
-        if (v.isBefore(start) || v == start) {
-            draftStartTime.value = v.minusHours(1)
-            // If pushing back across midnight
-            if (v.minusHours(1).isAfter(v)) {
-                draftStartDate.value = draftStartDate.value.minusDays(1)
-            }
-        }
-    }
+    fun updateDraftStartDate(v: LocalDate) =
+        setDraftSpan(draftSpan().moveStart(java.time.LocalDateTime.of(v, draftStartTime.value)))
+
+    fun updateDraftStartTime(v: java.time.LocalTime) =
+        setDraftSpan(draftSpan().moveStart(java.time.LocalDateTime.of(draftStartDate.value, v)))
+
+    fun updateDraftEndDate(v: LocalDate) =
+        setDraftSpan(draftSpan().setEnd(java.time.LocalDateTime.of(v, draftEndTime.value), draftIsAllDay.value))
+
+    fun updateDraftEndTime(v: java.time.LocalTime) =
+        setDraftSpan(draftSpan().setEnd(java.time.LocalDateTime.of(draftEndDate.value, v), draftIsAllDay.value))
+
     fun updateDraftIsAllDay(v: Boolean) { draftIsAllDay.value = v }
     fun updateDraftLocation(v: String) { draftLocation.value = v }
     fun updateDraftCalendarId(v: Long?) { draftCalendarId.value = v }
@@ -156,6 +155,22 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     private val _calendarsRefresh = MutableStateFlow<List<CalendarAccount>>(emptyList())
     val calendarsLive: StateFlow<List<CalendarAccount>> = _calendarsRefresh.asStateFlow()
 
+    /** Result of the last "Sync now" tap, shown as a plain line in Settings. Null until tapped. */
+    private val _syncStatus = MutableStateFlow<String?>(null)
+    val syncStatus: StateFlow<String?> = _syncStatus.asStateFlow()
+
+    fun requestSyncNow() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val asked = if (repo.hasReadPermission()) repo.requestSyncNow() else 0
+            val time = java.time.LocalTime.now().withSecond(0).withNano(0)
+            _syncStatus.value = when (asked) {
+                0 -> "No synced calendars to sync"
+                1 -> "Sync requested at $time"
+                else -> "Sync requested for $asked accounts at $time"
+            }
+        }
+    }
+
     val defaultCalendarId: StateFlow<Long?> = prefs.defaultCalendarId
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -185,36 +200,31 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             combine(_currentMonth, _hasPermission, repo.changes.onStart { emit(Unit) }) { m, g, _ -> m to g }
                 .collectLatest { (month, granted) ->
-                    _monthEvents.value = emptyList()
-                    if (granted) {
-                        val events = withContext(Dispatchers.IO) { repo.getEventsForMonth(month) }
-                        _monthEvents.value = events
-                    }
+                    // No clearing first: the old events stay until the new ones replace them.
+                    val events = if (granted) withContext(Dispatchers.IO) { repo.getEventsForMonth(month) } else emptyList()
+                    _monthEvents.value = events
+                    _shownMonth.value = month
                 }
         }
 
         viewModelScope.launch {
             combine(_selectedDate, _hasPermission, repo.changes.onStart { emit(Unit) }) { d, g, _ -> d to g }
                 .collectLatest { (date, granted) ->
-                    _dayEvents.value = emptyList()
-                    if (granted) {
-                        val events = withContext(Dispatchers.IO) { repo.getEventsForDate(date) }
-                        _dayEvents.value = events
-                    }
+                    val events = if (granted) withContext(Dispatchers.IO) { repo.getEventsForDate(date) } else emptyList()
+                    _dayEvents.value = events
+                    _shownDate.value = date
                 }
         }
 
         viewModelScope.launch {
             combine(_hasPermission, repo.changes.onStart { emit(Unit) }) { g, _ -> g }
                 .collectLatest { granted ->
-                    _upcomingEvents.value = emptyList()
-                    if (granted) {
-                        val events = withContext(Dispatchers.IO) {
+                    _upcomingEvents.value = if (granted) {
+                        withContext(Dispatchers.IO) {
                             val today = LocalDate.now()
                             repo.getEventsBetween(today, today.plusMonths(3))
                         }
-                        _upcomingEvents.value = events
-                    }
+                    } else emptyList()
                 }
         }
     }

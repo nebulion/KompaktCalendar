@@ -22,12 +22,18 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.kompakt.calendar.calendar.CalendarEvent
-import com.kompakt.calendar.ui.common.DashedDivider
-import com.mudita.mmd.components.divider.HorizontalDividerMMD
-import com.mudita.mmd.components.menus.DropdownMenuItemMMD
-import com.mudita.mmd.components.menus.DropdownMenuMMD
+import com.kompakt.calendar.ui.mmd.EinkColors
+import com.kompakt.calendar.ui.mmd.EinkType
+import com.kompakt.calendar.ui.mmd.HeaderAction
+import com.kompakt.calendar.ui.mmd.PageLoading
+import com.kompakt.calendar.ui.mmd.PanelActions
+import com.kompakt.calendar.ui.mmd.PanelBody
+import com.kompakt.calendar.ui.mmd.PanelDialog
+import com.kompakt.calendar.ui.mmd.PanelPrimaryAction
+import com.kompakt.calendar.ui.mmd.PanelSecondaryAction
+import com.kompakt.calendar.ui.mmd.PanelTitle
+import com.kompakt.calendar.ui.mmd.ScreenHeader
 import com.mudita.mmd.components.text.TextMMD
-import com.mudita.mmd.components.top_app_bar.TopAppBarMMD
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 import java.util.*
@@ -55,118 +61,84 @@ fun EventDetailScreen(
         }
     }
 
+    // Pattern P5: every delete confirms in a bottom panel, and a repeating
+    // event asks which occurrences first. No drop-down menus.
+    val instanceMillis = instanceTime ?: event?.start?.atZone(java.time.ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+    if (showDeleteConfirm) {
+        val recurring = !event?.rrule.isNullOrBlank()
+        PanelDialog(onDismissRequest = { showDeleteConfirm = false }) {
+            PanelTitle(if (recurring) "Delete repeating event?" else "Delete event?")
+            PanelBody(event?.title?.ifBlank { "Untitled event" } ?: "")
+            PanelActions {
+                PanelSecondaryAction("Cancel", onClick = { showDeleteConfirm = false })
+                if (recurring) {
+                    PanelSecondaryAction("All events", onClick = {
+                        showDeleteConfirm = false
+                        scope.launch {
+                            viewModel.deleteEventById(eventId, null)
+                            navController.popBackStack()
+                        }
+                    })
+                }
+                PanelPrimaryAction(if (recurring) "This event only" else "Delete", onClick = {
+                    showDeleteConfirm = false
+                    scope.launch {
+                        if (recurring) viewModel.deleteEventById(eventId, instanceMillis) else viewModel.deleteEventById(eventId)
+                        navController.popBackStack()
+                    }
+                })
+            }
+        }
+    }
+    if (showEditConfirm) {
+        PanelDialog(onDismissRequest = { showEditConfirm = false }) {
+            PanelTitle("Edit repeating event")
+            PanelBody("Change this event only, or every event in the series?")
+            PanelActions {
+                PanelSecondaryAction("Cancel", onClick = { showEditConfirm = false })
+                PanelSecondaryAction("All events", onClick = {
+                    showEditConfirm = false
+                    event?.let { ev ->
+                        viewModel.beginEditEvent(ev, null)
+                        navController.navigate("add_event?fromCalendar=false")
+                    }
+                })
+                PanelPrimaryAction("This event only", onClick = {
+                    showEditConfirm = false
+                    event?.let { ev ->
+                        viewModel.beginEditEvent(ev, instanceMillis)
+                        navController.navigate("add_event?fromCalendar=false")
+                    }
+                })
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
-            TopAppBarMMD(
+            ScreenHeader(
+                title = "Event",
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(32.dp))
-                    }
-                },
-                title = {
-                    TextMMD(text = "Event Preview", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    HeaderAction(Icons.Default.Close, "Close", { navController.popBackStack() })
                 },
                 actions = {
-                    Box {
-                        IconButton(
-                            onClick = {
-                                if (event?.rrule.isNullOrBlank()) {
-                                    scope.launch {
-                                        viewModel.deleteEventById(eventId)
-                                        navController.popBackStack()
-                                    }
-                                } else {
-                                    showDeleteConfirm = true
-                                }
+                    HeaderAction(Icons.Default.DeleteOutline, "Delete", { if (event != null) showDeleteConfirm = true })
+                    HeaderAction(Icons.Default.Edit, "Edit", {
+                        if (event?.rrule.isNullOrBlank()) {
+                            event?.let { ev ->
+                                viewModel.beginEditEvent(ev)
+                                navController.navigate("add_event?fromCalendar=false")
                             }
-                        ) {
-                            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", modifier = Modifier.size(30.dp))
+                        } else {
+                            showEditConfirm = true
                         }
-
-                        DropdownMenuMMD(
-                            expanded = showDeleteConfirm,
-                            onDismissRequest = { showDeleteConfirm = false }
-                        ) {
-                            DropdownMenuItemMMD(
-                                text = { TextMMD("This event only", fontWeight = FontWeight.Bold, color = Color.Black) },
-                                onClick = {
-                                    showDeleteConfirm = false
-                                    scope.launch {
-                                        viewModel.deleteEventById(eventId, instanceTime ?: event?.start?.atZone(java.time.ZoneId.systemDefault())?.toInstant()?.toEpochMilli())
-                                        navController.popBackStack()
-                                    }
-                                }
-                            )
-                            DashedDivider()
-                            DropdownMenuItemMMD(
-                                text = { TextMMD("All events", fontWeight = FontWeight.Bold, color = Color.Black) },
-                                onClick = {
-                                    showDeleteConfirm = false
-                                    scope.launch {
-                                        viewModel.deleteEventById(eventId, null)
-                                        navController.popBackStack()
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    Box {
-                        IconButton(
-                            onClick = {
-                                if (event?.rrule.isNullOrBlank()) {
-                                    event?.let { ev ->
-                                        viewModel.beginEditEvent(ev)
-                                        navController.navigate("add_event?fromCalendar=false")
-                                    }
-                                } else {
-                                    showEditConfirm = true
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(30.dp))
-                        }
-
-                        DropdownMenuMMD(
-                            expanded = showEditConfirm,
-                            onDismissRequest = { showEditConfirm = false }
-                        ) {
-                            DropdownMenuItemMMD(
-                                text = { TextMMD("This event only", fontWeight = FontWeight.Bold, color = Color.Black) },
-                                onClick = {
-                                    showEditConfirm = false
-                                    event?.let { ev ->
-                                        viewModel.beginEditEvent(ev, instanceTime ?: ev.start.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli())
-                                        navController.navigate("add_event?fromCalendar=false")
-                                    }
-                                }
-                            )
-                            DashedDivider()
-                            DropdownMenuItemMMD(
-                                text = { TextMMD("All events", fontWeight = FontWeight.Bold, color = Color.Black) },
-                                onClick = {
-                                    showEditConfirm = false
-                                    event?.let { ev ->
-                                        viewModel.beginEditEvent(ev, null)
-                                        navController.navigate("add_event?fromCalendar=false")
-                                    }
-                                }
-                            )
-                        }
-                    }
+                    })
                 }
             )
         }
     ) { paddingValues ->
         if (loading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
+            PageLoading(Modifier.padding(paddingValues))
         } else if (event == null) {
             Box(
                 modifier = Modifier
@@ -174,7 +146,7 @@ fun EventDetailScreen(
                     .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
-                TextMMD("Event not found")
+                TextMMD("Event not found", fontSize = EinkType.TitleMedium)
             }
         } else {
             val ev = event!!
@@ -184,16 +156,14 @@ fun EventDetailScreen(
                     .padding(paddingValues)
                     .verticalScroll(rememberScrollState())
             ) {
-                HorizontalDividerMMD(thickness = 2.dp)
-
                 Spacer(modifier = Modifier.height(24.dp))
 
                 TextMMD(
                     text = ev.title.ifBlank { "Untitled event" },
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = EinkType.Headline,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 16.dp),
-                    lineHeight = 38.sp
+                    lineHeight = 34.sp
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -209,7 +179,7 @@ fun EventDetailScreen(
                     Box(
                         modifier = Modifier
                             .size(52.dp)
-                            .border(1.5.dp, Color.Black, RoundedCornerShape(12.dp)),
+                            .border(2.dp, EinkColors.Ink, RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -261,11 +231,7 @@ fun EventDetailScreen(
                     DetailRow(label = "Location", value = location)
                 }
 
-                TextMMD(
-                    text = "Calendar: ${ev.calendarDisplayName}",
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                DetailRow(label = "Calendar", value = ev.calendarDisplayName)
 
                 if (ev.hasReminder) {
                     val reminderText = ev.reminders.joinToString(", ") { mins ->
@@ -289,18 +255,7 @@ fun EventDetailScreen(
 
                 val description = ev.description
                 if (!description.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    TextMMD(
-                        text = "Notes",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                    TextMMD(
-                        text = description,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+                    DetailRow(label = "Notes", value = description)
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -314,13 +269,13 @@ private fun DetailRow(label: String, value: String) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         TextMMD(
             text = label,
-            fontSize = 12.sp,
+            fontSize = EinkType.TitleSmall,
             fontWeight = FontWeight.Bold
         )
         TextMMD(
             text = value,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium
+            fontSize = EinkType.Body,
+            fontWeight = FontWeight.Normal
         )
     }
 }
